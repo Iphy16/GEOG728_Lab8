@@ -1,0 +1,321 @@
+---
+title: "Lab#8"
+author: "Ifeoma Okonye"
+date: "2024-03-27"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction {.tabset}
+
+To begin, I imported the required datalayers. The layers were landuse of 2016 - 2019 for riley county and the wildcat creek watershed shapefile. I then did some tidying and made sure all data layers were in the right coordinate reference system.
+
+
+```{r warning = FALSE, message = FALSE, error = FALSE}
+#rm(list = ls())
+# i am trying to figure git out
+# to get the pipe ( %>% ) is ctrl+shft+m
+# to get the r equal sign ( <- ) is atl+(-)
+
+library(pacman)
+p_load(raster, terra, sf, tidyverse)
+
+#loading in the data
+wcw <- st_read("Data/Wildcat_creek_Watershed/Wildcat_creek_Watershed.shp")
+
+
+riley2016 <- rast("Data/Cropland_Data/CDL_2016_20161.tif")
+riley2016
+riley2017 <- rast("Data/Cropland_Data/CDL_2017_20161.tif")
+riley2017
+riley2018 <- rast("Data/Cropland_Data/CDL_2018_20161.tif")
+riley2018
+riley2019 <- rast("Data/Cropland_Data/CDL_2019_20161.tif")
+riley2019
+
+#Because all other raster dataset are using the correct data name except 2019, I activate riley 2019 to the class_name column
+
+activeCat(riley2019) <- 4 
+plot(riley2019)
+
+#looking at the dataset
+minmax(riley2016, compute = T)
+minmax(riley2017, compute = T)
+minmax(riley2018, compute = T)
+minmax(riley2019, compute = T)
+
+riley2016[riley2016 == 0] <- NA
+riley2017[riley2017 == 0] <- NA
+riley2018[riley2018 == 0] <- NA
+riley2019[riley2019 == 0] <- NA
+
+riley2016 <- trim(riley2016)
+riley2017 <- trim(riley2017)
+riley2018 <- trim(riley2018)
+riley2019 <- trim(riley2019)
+
+
+
+plot(riley2016)
+plot(riley2017)
+plot(riley2018)
+plot(riley2019)
+
+
+
+#removing missing values
+
+
+
+#setting crs
+
+crs(riley2016)
+st_crs(wcw)
+
+
+
+crs <- '+proj=utm +zone=11 +ellps=GRS80 +datum=NAD83 +units=m +no_defs'
+
+# Use project for SpatRasters in terra
+
+riley2016 <- project(riley2016, crs, res = res(riley2016), method = "near")
+
+riley2017 <- project(riley2017, crs, res = res(riley2017), method = "near")
+
+riley2018 <- project(riley2018, crs, res = res(riley2018), method = "near")
+
+riley2019 <- project(riley2019, crs, res = res(riley2019), method = "near")
+
+plot(riley2016)
+
+```
+
+
+
+
+### Question 1
+
+I created a new raster by subsetting the raster layers so that they are smaller and closer to the area of interest using the crop function. Then I used the mask function to clip the rasters to the watershed extent.
+
+
+```{r warning = FALSE, message = FALSE, error = FALSE}
+
+# To convert the crs of the watershed data to be the same as riley
+
+wcw <- st_transform(wcw, crs = crs)
+
+plot(riley2016)
+plot(wcw, col = NA, add = T)
+
+
+#cropping out the watershed
+
+wcw_rc2016 <- crop(riley2016, wcw)
+plot(wcw_rc2016)
+plot(wcw, col = NA, add = T)
+
+wcw_rc2017 <- crop(riley2017, wcw)
+plot(wcw_rc2017)
+plot(wcw, col = NA, add = T)
+
+wcw_rc2018 <- crop(riley2018, wcw)
+plot(wcw_rc2018)
+plot(wcw, col = NA, add = T)
+
+wcw_rc2019 <- crop(riley2019, wcw)
+plot(wcw_rc2019)
+plot(wcw, col = NA, add = T)
+
+
+#masking out the watershed
+
+wcw_rc2016m <- mask(wcw_rc2016, mask = wcw)
+plot(wcw_rc2016m)
+
+wcw_rc2017m <- mask(wcw_rc2017, mask = wcw)
+plot(wcw_rc2017m)
+
+wcw_rc2018m <- mask(wcw_rc2018, mask = wcw)
+plot(wcw_rc2018m)
+
+wcw_rc2019m <- mask(wcw_rc2019, mask = wcw)
+plot(wcw_rc2019m)
+
+```
+
+
+
+
+### Question 2
+
+I used the frequency function to determine the most common landuse type in the wildcat creek watershed for each year. For each year, the Grass/Pasture landuse type was the most common in the study area. WIth each year, the common landuse type (Grass/Pasture) decreased. the Grass/Pasture landuse type went from 63,444 in 2016 to 59,470 in 2019.
+
+
+```{r warning = FALSE, message = FALSE, error = FALSE}
+
+
+freq2016 <- freq(wcw_rc2016m)
+most_common_landuse2016 <- freq2016[which.max(freq2016$count), ]
+most_common_landuse2016
+
+freq2017 <- freq(wcw_rc2017m)
+most_common_landuse2017 <- freq2017[which.max(freq2017$count), ]
+most_common_landuse2017
+
+freq2018 <- freq(wcw_rc2018m)
+most_common_landuse2018 <- freq2018[which.max(freq2018$count), ]
+most_common_landuse2018
+
+freq2019 <- freq(wcw_rc2019m)
+most_common_landuse2019 <- freq2019[which.max(freq2019$count), ]
+most_common_landuse2019
+
+```
+
+
+
+
+
+
+### Question 3
+
+
+I created two new raster layers. One displayed the locations where land use type in 2016 and 2019 is different, and the other displayed the most frequent land use type across all years within the watershed.
+
+
+
+```{r warning = FALSE, message = FALSE, error = FALSE}
+
+# Identifying Changes Between 2016 and 2019
+
+# Create raster highlighting changes (True = changed, False = unchanged)
+changes16_19 <- wcw_rc2016m != wcw_rc2019m
+
+# Plot the changes
+plot(changes16_19, main = "Land Use Changes Between 2016 and 2019")
+
+
+
+
+
+# Identifying the Most Frequent Land Use Type Across All Years
+
+# Stack all yearly land use rasters
+Landuse_all_years <- c(wcw_rc2016m, wcw_rc2017m, wcw_rc2018m, wcw_rc2019m)
+
+
+# Use the 'modal' function to find the most frequent value (mode) across the layers for each cell
+most_frequent_landuse <- app(Landuse_all_years, fun = modal, na.rm = T)
+
+
+# Plot the most frequent land use type
+plot(most_frequent_landuse, main = "Most Frequent Land Use Type Across All four Years")
+
+
+```
+
+
+
+
+### Question 4
+
+I increased the size of the raster grid cells of the 2019 watershed land use raster by a factor of 10 using the resample function. In this new low resolution raster layer, the most common landuse type for 2019 was still Grass/Pasture but the count went from 59,470 in the high resolution layer to 601 in the low resolution data. From the analysis, the landuses in the low resolution data seems to have been reduced from 29 landuses (in the high resolution layer) to 19 land uses. There was a reduction of 10 landuses. I also plotted the coarser (low resolution) raster.
+
+
+
+```{r warning = FALSE, message = FALSE, error = FALSE}
+
+#checking resolutions
+res(wcw_rc2016m)
+res(wcw_rc2017m)
+res(wcw_rc2018m)
+res(wcw_rc2019m)
+
+
+# Increasing size of raster grid cell by a factor of 10
+new_ras <- rast(crs = crs,
+                  ext = ext(wcw_rc2019m),
+                  resolution = c(300, 300))
+
+
+wcw_rc2019m_resampled <- resample(wcw_rc2019m, new_ras,
+                                  method = "ngb")
+
+plot(wcw_rc2019m_resampled, main = "Resampled Riley 2019 Watershed Landuse")
+
+
+# Determine most common land use of this lower resolution raster
+
+freq2019_resampled <- freq(wcw_rc2019m_resampled)
+
+most_common_landuse2019_rsp <- freq2019_resampled[which.max(freq2019_resampled$count), ]
+most_common_landuse2019_rsp
+
+
+# Determine if all land uses in high res raster are found in lower res raster
+
+high_res_lu <- unique(wcw_rc2019m$CLASS_NAME)
+count(high_res_lu) 
+high_res_lu
+
+
+low_res_lu <- unique(wcw_rc2019m_resampled$CLASS_NAME)
+count(low_res_lu) 
+low_res_lu
+
+
+```
+
+### Question 5
+
+I resampled the 2019 landuse raster to 1 kilometer and then I plotted it. Using visual inspection, I could see that a lot of the detail in the data and the representation of different land use types had been lost. ALso the legend from the plot shows that the landuses had reduced.  Using the freq function,I compared the frequency of different land use types between the two rasters and saw significant changes in the frequency of land use types which indicate areas where finer details were lost in the resampling process. The landuse types went from 29 in the high resolution raster to 12 in the resampled raster and also the frequency of the most common landuse (Grassland/Pasture), went down to a count of 55.
+
+
+```{r warning = FALSE, message = FALSE, error = FALSE}
+
+# Adjusting size of raster grid cell to 1000m (1km x 1km)
+new_ras_1km <- rast(crs = crs,
+                  ext = ext(wcw_rc2019m),
+                  resolution = c(1000, 1000))
+
+
+
+
+wcw_rc2019m_r1km <- resample(wcw_rc2019m, new_ras_1km,
+                                  method = "ngb")
+
+plot(wcw_rc2019m_r1km, main = "2019 Riley Watershed Landuse Resampled to 1km")
+
+
+
+
+# Compare coarse resolution raster to original high resolution raster  and if the landuses are the same
+
+
+#coarse res
+freq2019_res1km <- freq(wcw_rc2019m_r1km)
+count(freq2019_res1km)
+
+most_common_landuse2019_rsp1km <- freq2019_res1km[which.max(freq2019_res1km$count), ]
+most_common_landuse2019_rsp1km
+
+
+#high res
+freq2019 <- freq(wcw_rc2019m)
+count(freq2019)
+
+most_common_landuse2019 <- freq2019[which.max(freq2019$count), ]
+most_common_landuse2019
+
+
+```
+
+
+
+
+
+
